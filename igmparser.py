@@ -86,14 +86,15 @@ def centrePixel(bilarray, point):
                 bilarray[1][scanlinenumber][centerpx],
                 bilarray[2][scanlinenumber][centerpx]]
 
-      if scanlinenumber != (len(bilarray[0]) - 1):
+      if scanlinenumber != (bilarray.shape[1] - 1):
          centerahead = [bilarray[0][scanlinenumber + 1][centerpx],
                         bilarray[1][scanlinenumber + 1][centerpx],
                         bilarray[2][scanlinenumber + 1][centerpx]]
+      else:
+         centerahead = None
 
       #this is also the best time to return the bearing for this area of the flightline
-      if scanlinenumber > 0 and scanlinenumber != bilarray.shape[1]:
-         print bilarray.shape[1]
+      if (scanlinenumber > 0) and (centerahead is not None):
          centerbehind = [bilarray[0][scanlinenumber - 1][centerpx],
                          bilarray[1][scanlinenumber - 1][centerpx],
                          bilarray[2][scanlinenumber - 1][centerpx]]

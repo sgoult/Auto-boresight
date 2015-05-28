@@ -106,7 +106,7 @@ def tiePointGenerator(scanline1, scanline2, igmarray):
    try:
       good = []
       for m, n in matches:
-         if m.distance < 0.9 * n.distance:
+         if m.distance < 1.1 * n.distance:
             good.append(m)
    except Exception, e:
       print e
@@ -122,12 +122,8 @@ def tiePointGenerator(scanline1, scanline2, igmarray):
    slk1_filtered = []
    slk2_filtered = []
    for e, point in enumerate(matched_points):
-      print "point 1"
-      print point
-      print "point 2"
-      print destination_points[e]
-      if (destination_points[e][0][0] + 100) > point[0][0] and (destination_points[e][0][0] - 100) < point[0][0]:
-         if (destination_points[e][0][1] + 100) > point[0][1] and (destination_points[e][0][1] - 100) < point[0][0]:
+      if ((destination_points[e][0][0] + 100) > point[0][0]) and ((destination_points[e][0][0] - 100) < point[0][0]):
+         if ((destination_points[e][0][1] + 100) > point[0][1]) and ((destination_points[e][0][1] - 100) < point[0][1]):
             slk1_filtered.append(np.float32(slk1[e].pt))
             slk2_filtered.append(np.float32(point[0]))
 
