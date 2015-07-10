@@ -143,8 +143,31 @@ gdaltrainlev1map = gdal.Open(image1_lev1map)
 
 gdaltrainlev1mapbil = numpy.array(gdaltrainlev1map.ReadAsArray(trext[0],trext[1],trext[2],trext[3]), dtype="uint32")
 gdalquerylev1mapbil = numpy.array(gdalquerylev1map.ReadAsArray(qext[0],qext[1],qext[2],qext[3]), dtype="uint32")
-igmfile = "//"
-igmarray = gdal.ReadAsArray(gdal.Open(igmfile))
+trainigmfile = "/data/visuyan2/scratch/arsf/2015/flight_data/arsf_internal/GB15_00-2014_096_Little_Riss/processing/hyperspectral/flightlines/georeferencing/igm/f96063b_p_sct0.01.igm"
+queryigmfile = "/data/visuyan2/scratch/arsf/2015/flight_data/arsf_internal/GB15_00-2014_096_Little_Riss/processing/hyperspectral/flightlines/georeferencing/igm/f96053b_p_sct0.97.igm"
+trainigmarray = gdal.Open(trainigmfile).ReadAsArray()
+queryigmarray = gdal.Open(queryigmfile).ReadAsArray()
+
+pointcombos = []
+
+for match in good:
+    trainscanline = gdaltrainlev1mapbil[0][trainkeys[match.trainIdx].pt[1]][trainkeys[match.trainIdx].pt[0]]
+    trainpixel = gdaltrainlev1mapbil[1][trainkeys[match.trainIdx].pt[1]][trainkeys[match.trainIdx].pt[0]]
+    queryscanline = gdalquerylev1mapbil[0][trainkeys[match.trainIdx].pt[1]][trainkeys[match.trainIdx].pt[0]]
+    querypixel = gdalquerylev1mapbil[1][trainkeys[match.trainIdx].pt[1]][trainkeys[match.trainIdx].pt[0]]
+    print trainscanline, trainpixel
+    pointonscanline = pixel_to_coords(trainscanline, trainpixel, trainigmarray)
+    pointoffscanline = pixel_to_coords(queryscanline, querypixel, queryigmarray)
+    centrepixel = centre_pixel_builder(trainscanline, trainigmarray)
+    centredpointonscanline = [pointonscanline[0] - centrepixel[0],pointonscanline[1] - centrepixel[1],pointonscanline[2] - centrepixel[2]]
+    centredpointoffscanline = [pointoffscanline[0] - centrepixel[0],pointoffscanline[1] - centrepixel[1],pointoffscanline[2] - centrepixel[2]]
+    pointcombos.append([pointonscanline, pointoffscanline, centrepixel, centredpointonscanline, centredpointoffscanline])
+
+pointcombos = numpy.array(pointcombos)
+
+print pointcombos
+
+
 
 gdalquerylev1mapbil = numpy.array(gdalquerylev1map.ReadAsArray(), dtype="uint16")
 cv2.imshow('Matched Features', matchedimg)
