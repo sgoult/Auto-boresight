@@ -9,8 +9,14 @@ import libgpstime
 import read_sol_file
 import timeit
 import datetime
+import imagematcher
 
 from osgeo import gdal
+
+RIGHT = 1
+LEFT = 2
+CENTER =0
+BANDLIST = [1, 2]
 
 def gpssec(year, month, day, hour, minute, second):
    """
@@ -52,6 +58,7 @@ def altFind(hdrfile, navfile):
          day = line[37:]
 
    #identify the start and stop points of the scanline
+
    day, month, year = day.split('-')
 
    hour, minute, second = start.split(':')
@@ -71,17 +78,17 @@ def altFind(hdrfile, navfile):
    altitude = np.mean(trimmed_data['alt'])
    return altitude
 
-def autoBoresight(scanlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, output, hdrfolder):
+def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, output, hdrfolder, lev1mapfolder):
    """
    Function autoBoresight
 
-   Main function for boresighting, takes a scanline folder, igm folder nav file and level 1 header folder
-   returns averaged adjustments across all flightlines in the scanline folder
+   Main function for boresighting, takes a queryflightline folder, igm folder nav file and level 1 header folder
+   returns averaged adjustments across all flightlines in the queryflightline folder
 
    optionally takes gcp location info and a folder of gcp images,
    however this is currently not tested or implemented
 
-   :param scanlinefolder:
+   :param flightlinefolder:
    :param gcpfolder:
    :param gcpcsv:
    :param igmfolder:
@@ -94,75 +101,55 @@ def autoBoresight(scanlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, output,
    start_time = timeit.default_timer()
    igmfiles = os.listdir(igmfolder)
    hdrfiles = os.listdir(hdrfolder)
+   lev1maps = os.listdir(lev1mapfolder)
    navfile = read_sol_file.readSol(navfile)
-   #if we have a gcpcsv then do some calculations on it
-   if gcpcsv:
-      gcparray = gcpparser.GcpGrabber(gcpcsv)
-      gcparray = gcpparser.GcpImageAssociator(gcparray, gcpfolder)
-      adjust = []
-   else:
-      gcparray = None
    adjust=[]
-   for flightline in os.listdir(scanlinefolder):
+   for flightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x]:
       #we need to establish the altitude of our primary flightline
-      igmfile = [x for x in igmfiles if flightline[:9] in x and 'osng' in x and 'igm' in x and 'hdr' not in x][0]
-      flightlinename = flightline
-      flightline = (scanlinefolder + '/' + flightline)
-      flightlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if flightlinename[:6] in hdrfile and 'hdr' in hdrfile][0])
-      flightlinealtitude = altFind(flightlineheaderfile, navfile)
-      igmarray = igmparser.bilReader(igmfolder + '/' + igmfile)
-      #produce matches to gcps
-      if gcparray:
-         scanlinegcps = features.gcpIdentifier(flightline, gcparray)
-         filteredgcps = []
-         for gcp in scanlinegcps:
-            gcp.append(features.heightGrabber(igmarray, [gcp[1], gcp[2]]))
-            for actualgcp in gcparray:
-               if gcp[0] == actualgcp[0]:
-                  filteredgcps.append(actualgcp)
-         gcpadjustments = distancecalculator.calculator(flightline,
-                                              scanlinegcps,
-                                              filteredgcps,
-                                              igmarray,
-                                              flightlinealtitude,
-                                              groundcontrolpoints=True)
-      else:
-         gcpadjustments=None
-      #this will always be run regardless if the gcps are there
+      baseigmfile = [x for x in igmfiles if flightline[:5] in x and 'osng' in x and 'igm' in x and 'hdr' not in x][0]
+      baseflightline = flightline
+      baseflightline = (flightlinefolder + '/' + flightline)
+      print flightline
+      baseflightlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if flightline[:5] in hdrfile and 'hdr' in hdrfile and "mask" not in hdrfile][0])
+      baseflightlinealtitude = altFind(baseflightlineheaderfile, navfile)
+      baselev1map = lev1mapfolder + '/' + [x for x in lev1maps if flightline[:5] in x and 'bil' in x and 'hdr' not in x][0]
+      igmarray = igmparser.bilReader(igmfolder + '/' + baseigmfile)
+
       scanlineadjustments = []
       totalpoints = 0
-      for scanline in os.listdir(scanlinefolder):
+      for queryflightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x]:
          #need to test if they have the same filename otherwise it would be bad
-         if scanline not in flightlinename:
-            print "%s being compared to %s" % (scanline, flightlinename)
+         if queryflightline not in baseflightline:
+            print "%s being compared to %s" % (queryflightline, baseflightline)
             #first test for same altitude
-            scanlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if scanline[:6] in hdrfile and 'hdr' in hdrfile][0])
-            scanlinealtitude = altFind(scanlineheaderfile, navfile)
+            queryflightlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if queryflightline[:5] in hdrfile and 'hdr' in hdrfile and "mask" not in hdrfile][0])
+            queryflightlinealtitude = altFind(queryflightlineheaderfile, navfile)
 
 
-            if (scanlinealtitude >= flightlinealtitude - 100) and (scanlinealtitude <= flightlinealtitude + 100):
-               print "altitudes matched at %s %s" % (scanlinealtitude, flightlinealtitude)
+            if (queryflightlinealtitude >= baseflightlinealtitude - 100) and (queryflightlinealtitude <= baseflightlinealtitude + 100):
+               print "altitudes matched at %s %s" % (queryflightlinealtitude, baseflightlinealtitude)
                #then test for overlap
-               scanlineigmfile = [x for x in igmfiles if scanline[:6] in x and 'osng' in x and 'igm' in x and 'hdr' not in x][0]
-               scanlineigmarray = igmparser.bilReader(igmfolder + '/' + scanlineigmfile)
-               scanline = scanlinefolder + '/' + scanline
-               gdalscanline = gdal.Open(scanline)
-               gdalflightline = gdal.Open(flightline)
-               flightlinegeotrans = gdalscanline.GetGeoTransform()
-               scanlinegeotrans = gdalscanline.GetGeoTransform()
-               flightlinebounds = [flightlinegeotrans[0],
-                                   flightlinegeotrans[3],
-                                   flightlinegeotrans[0] + (flightlinegeotrans[1] * gdalflightline.RasterXSize),
-                                   flightlinegeotrans[3] + (flightlinegeotrans[5] * gdalflightline.RasterYSize)]
-               scanlinebounds = [flightlinegeotrans[0],
-                                scanlinegeotrans[3],
-                                scanlinegeotrans[0] + (scanlinegeotrans[1] * gdalscanline.RasterXSize),
-                                scanlinegeotrans[3] + (scanlinegeotrans[5] * gdalscanline.RasterYSize)]
+               queryigmfile = [x for x in igmfiles if queryflightline[:5] in x and 'osng' in x and 'igm' in x and 'hdr' not in x][0]
+               queryigmarray = igmparser.bilReader(igmfolder + '/' + queryigmfile)
+               querylev1map = lev1mapfolder + '/' + [x for x in lev1maps if queryflightline[:5] in x and 'bil' in x and 'hdr' not in x][0]
+               queryflightline = flightlinefolder + '/' + queryflightline
+               gdalqueryflightline = gdal.Open(queryflightline)
+               gdalbaseflightline = gdal.Open(baseflightline)
+               baseflightlinegeotrans = gdalqueryflightline.GetGeoTransform()
+               queryflightlinegeotrans = gdalqueryflightline.GetGeoTransform()
+               baseflightlinebounds = [baseflightlinegeotrans[0],
+                                      baseflightlinegeotrans[3],
+                                      baseflightlinegeotrans[0] + (baseflightlinegeotrans[1] * gdalbaseflightline.RasterXSize),
+                                      baseflightlinegeotrans[3] + (baseflightlinegeotrans[5] * gdalbaseflightline.RasterYSize)]
+               querybounds = [baseflightlinegeotrans[0],
+                             queryflightlinegeotrans[3],
+                             queryflightlinegeotrans[0] + (queryflightlinegeotrans[1] * gdalqueryflightline.RasterXSize),
+                             queryflightlinegeotrans[3] + (queryflightlinegeotrans[5] * gdalqueryflightline.RasterYSize)]
 
-               overlap = [max(flightlinebounds[0], scanlinebounds[0]),
-                          min(flightlinebounds[1], scanlinebounds[1]),
-                          min(flightlinebounds[2], scanlinebounds[2]),
-                          max(flightlinebounds[3], scanlinebounds[3])]
+               overlap = [max(baseflightlinebounds[0], querybounds[0]),
+                          min(baseflightlinebounds[1], querybounds[1]),
+                          min(baseflightlinebounds[2], querybounds[2]),
+                          max(baseflightlinebounds[3], querybounds[3])]
 
                if (overlap[2] < overlap[0]) or (overlap[1] < overlap[3]):
                   #if there is no overlap
@@ -170,43 +157,86 @@ def autoBoresight(scanlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, output,
 
                #if there isn't an overlap then we should ignore these flightlines
                if overlap != None:
-                  print "overlap confirmed between %s and %s region is:" % (scanline, flightline)
-                  print overlap
-                  slk1, slk2 = features.tiePointGenerator(flightline, scanline, igmarray)
-                  online=[]
-                  offline=[]
-                  i=1
-                  totalpoints = totalpoints + len(slk1)
-                  #finally compare the images for key points
-                  for enum, point in enumerate(slk1):
-                     #creates ordered lists of the matched points
-                     onlinecoords = features.pixelCoordinates(point[0], point[1], gdalflightline)
-                     # print "online"
-                     # print slk1[match.trainIdx].pt
-                     # print onlinecoords
-                     onlinecoordsheight = features.heightGrabber(igmarray, onlinecoords)
-                     online.append([i, onlinecoords[0], onlinecoords[1], onlinecoordsheight])
+                  print "overlap confirmed between %s and %s region is:" % (queryflightline, baseflightline)
+                  for band in BANDLIST:
+                     no_matches=False
+                     try:
+                         trainkeys, querykeys, trext, qext, good = imagematcher.matcher(baseflightline,
+                                                                                        queryflightline,
+                                                                                        "flann",
+                                                                                        None,
+                                                                                        band=band)
+                     except ValueError:
+                         no_matches=True
+                     if not no_matches:
+                         pointcombos = imagematcher.matches_to_hyperspectral_geopoints(baselev1map,
+                                                                                      querylev1map,
+                                                                                      igmfolder + '/' + baseigmfile,
+                                                                                      igmfolder + '/' + queryigmfile,
+                                                                                      good,
+                                                                                      trainkeys,
+                                                                                      querykeys,
+                                                                                      trext,
+                                                                                      qext)
+                         if len(pointcombos[0]) > 0:
+                            pitch = []
+                            roll = []
+                            heading = []
+                            for pointgroup in pointcombos:
+                               if pointgroup[5] is RIGHT:
+                                  for comparisonpoint in pointcombos:
+                                     if comparisonpoint[5] is LEFT:
+                                        intersectpoint = distancecalculator.intersect(pointgroup[0],
+                                                                                      comparisonpoint[0],
+                                                                                      pointgroup[1],
+                                                                                      comparisonpoint[1])
+                                        print "intersect point pre centre pix"
+                                        print intersectpoint
+                                        print "centre pix"
+                                        print pointgroup[2]
+                                        intersectpoint = [intersectpoint[0] + pointgroup[2][0],
+                                                         intersectpoint[1] + pointgroup[2][1],
+                                                         pointgroup[2][2]]
+                                        if intersectpoint[0] < 800000 or intersectpoint[1] < 800000:
+                                            tempheading = distancecalculator.headingAngle(intersectpoint,
+                                                                                          pointgroup[0],
+                                                                                          pointgroup[1])
+                                            heading.append(tempheading)
+                                        else:
+                                            heading.append(0)
+                               if pointgroup[5] is LEFT:
+                                  for comparisonpoint in pointcombos:
+                                     if comparisonpoint[5] is RIGHT:
+                                        intersectpoint = distancecalculator.intersect(pointgroup[3],
+                                                                                      comparisonpoint[3],
+                                                                                      pointgroup[4],
+                                                                                      comparisonpoint[4])
+                                        print "intersect point pre centre pix"
+                                        print intersectpoint
+                                        print "centre pix"
+                                        print pointgroup[2]
+                                        intersectpoint = [intersectpoint[0] + pointgroup[2][0],
+                                                        intersectpoint[1] + pointgroup[2][1],
+                                                        pointgroup[2][2]]
+                                        if intersectpoint[0] < 800000 or intersectpoint[1] < 800000:
+                                            tempheading = distancecalculator.headingAngle(intersectpoint,
+                                                                                          pointgroup[0],
+                                                                                          pointgroup[1])
+                                            heading.append(tempheading)
+                                        else:
+                                            heading.append(0)
 
-                     offlinecoords = features.pixelCoordinates(slk2[enum][0], slk2[enum][1], gdalscanline)
-                     # print "offline"
-                     # print slk2[match.trainIdx].pt
-                     # print offlinecoords
-                     offlinecoordsheight = features.heightGrabber(scanlineigmarray, offlinecoords)
-                     offline.append([i, offlinecoords[0], offlinecoords[1], offlinecoordsheight])
-                     i+=1
-                  try:
-                     pit, rol, hed = distancecalculator.calculator(flightline, online, offline, igmarray, flightlinealtitude, groundcontrolpoints=False)
-                     print pit, rol, hed
-                     scanlineadjustments.append([np.float64(pit), np.float64(rol), np.float64(hed)])
-                  except ArithmeticError:
-                     continue
-                  #except Exception, e:
-                     #print e
-                     #print "no match found between %s and %s" % (flightline, scanline)
+                            for pointgroup in pointcombos:
+                               temppitch, temproll = distancecalculator.pitchRollAdjust(pointgroup[2],pointgroup[1],pointgroup[0],2000)
+                               pitch.append(temppitch)
+                               roll.append(temproll)
+                            adjust.append([pitch, roll, heading])
+                     else:
+                         print "no matches between %s and %s" % (queryflightline, baseflightline)
                else:
-                  print "no overlap between %s and %s" % (scanline, flightline)
+                  print "no overlap between %s and %s" % (queryflightline, baseflightline)
             else:
-               print "%s and %s flown at different altitudes (%s, %s), skipping to avoid result skew" % (flightlinename, scanline, flightlinealtitude, scanlinealtitude)
+               print "%s and %s flown at different altitudes (%s, %s), skipping to avoid result skew" % (baseflightline, queryflightline, baseflightlinealtitude, queryflightlinealtitude)
          else:
             continue
 
@@ -240,7 +270,7 @@ def autoBoresight(scanlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, output,
    p = 0
    r = 0
    h = 0
-   print "Total scanline adjustments:"
+   print "Total queryflightline adjustments:"
    print len(adjust)
    for a in adjust:
       # print a[0]
@@ -260,7 +290,7 @@ def autoBoresight(scanlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, output,
    print r / 2
    print "heading"
    print h / 2
-   print "Calculated on %s points from %s flightlines" % (totalpoints, len(os.listdir(scanlinefolder)))
+   print "Calculated on %s points from %s flightlines" % (totalpoints, len(os.listdir(flightlinefolder)))
    print "Took %s seconds" % (timeit.default_timer() - start_time)
    return p, r, h
 
@@ -287,9 +317,9 @@ if __name__=='__main__':
                        help='project nav file (sol/sbet)',
                        default="",
                        metavar="<sol/sbet>")
-   parser.add_argument('--geotiffs',
-                       '-t',
-                       help='geotiffs folder (can be in the same folder as mapped bils)',
+   parser.add_argument('--bils',
+                       '-b',
+                       help='mapped bil folder',
                        default="",
                        metavar="<folder>")
    parser.add_argument('--output',
@@ -302,6 +332,11 @@ if __name__=='__main__':
                        help='level 1 folder with headers',
                        default="",
                        metavar="<folder>")
+   parser.add_argument('--lev1maps',
+                       '-m',
+                       help='level 1 map folder with headers',
+                       default="",
+                       metavar="<folder>")
    commandline=parser.parse_args()
 
    if os.path.exists(commandline.igmfolder):
@@ -310,10 +345,10 @@ if __name__=='__main__':
       print "igm folder required, use -i or --igmfolder"
       exit(0)
 
-   if os.path.exists(commandline.geotiffs):
-      gtifflist = os.path.abspath(commandline.geotiffs)
+   if os.path.exists(commandline.bils):
+      billist = os.path.abspath(commandline.bils)
    else:
-      print "geotiff folder required, use -t or --geotiffs"
+      print "bil folder required, use -b or --bils"
       exit(0)
 
    if os.path.exists(commandline.navfile):
@@ -328,6 +363,12 @@ if __name__=='__main__':
       print "level 1 folder required, use -l or --lev1"
       exit(0)
 
+   if os.path.exists(commandline.lev1maps):
+      lev1mapfolder = os.path.abspath(commandline.lev1maps)
+   else:
+      print "level 1 map folder required, use -m or --lev1maps"
+      exit(0)
+
    if commandline.gcps or commandline.gcpimages:
       if not commandline.gcps or not commandline.gcpimages:
          print "gcp csv or gcp images folder not present"
@@ -335,7 +376,12 @@ if __name__=='__main__':
       else:
          gcpimagesfolder = commandline.gcpimages
          gcpcsv = commandline.gcps
-
-      boresight = autoBoresight(gtifflist, gcpimagesfolder, gcpcsv, igmlist, navfile, None, hdrfolder)
    else:
-      boresight = autoBoresight(gtifflist, None, None, igmlist, navfile, None, hdrfolder)
+      boresight = autoBoresight(billist,
+                                None,
+                                None,
+                                igmlist,
+                                navfile,
+                                None,
+                                hdrfolder,
+                                lev1mapfolder)
