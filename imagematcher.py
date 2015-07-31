@@ -5,9 +5,6 @@ import distancecalculator
 import os
 
 def scanlinepixelgrabber(xidx, yidx, rowcolmap):
-    print xidx
-    print yidx
-    print rowcolmap.shape
     scanline = rowcolmap[0][yidx][xidx]
     pixel = rowcolmap[1][yidx][xidx]
     if (scanline == 4294967295 or pixel == 4294967295):
@@ -29,7 +26,6 @@ def scanlinepixelgrabber(xidx, yidx, rowcolmap):
     if (scanline == 4294967295):
         scanline = None
         print "im setting it to no"
-    print "return"
     return scanline, pixel
 
 
@@ -161,16 +157,13 @@ def matches_to_hyperspectral_geopoints(image1_lev1map, image2_lev1map, trainigmf
     trainigmarray = gdal.Open(trainigmfile).ReadAsArray()
     queryigmarray = gdal.Open(queryigmfile).ReadAsArray()
     pointcombos = []
-    print len(matches)
     for num, match in enumerate(matches):
         trainscanline, trainpixel = scanlinepixelgrabber(trainkeys[match.queryIdx].pt[0],
                                                          trainkeys[match.queryIdx].pt[1],
                                                          gdaltrainlev1mapbil)
-        print "query pixel"
         queryscanline, querypixel = scanlinepixelgrabber(querykeys[match.trainIdx].pt[0],
                                                          querykeys[match.trainIdx].pt[1],
                                                          gdalquerylev1mapbil)
-        print trainscanline, trainpixel, queryscanline, querypixel
         if not queryscanline is None and not trainscanline is None:
             pointonscanline = pixel_to_coords(trainpixel, trainscanline, trainigmarray)
             pointoffscanline = pixel_to_coords(querypixel, queryscanline, queryigmarray)

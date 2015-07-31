@@ -179,10 +179,6 @@ def headingAngle(intersectpoint, offsensorpoint, onsensorpoint):
    z = 2
 
    #create the vector of the scanline direction
-   print "on sensor"
-   print onsensorpoint
-   print "intersect"
-   print intersectpoint
    sensorvect = [(onsensorpoint[x] - intersectpoint[x]),
                  (onsensorpoint[y] - intersectpoint[y]),
                  (onsensorpoint[z] - intersectpoint[z])]

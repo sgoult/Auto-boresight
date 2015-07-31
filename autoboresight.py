@@ -104,20 +104,19 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
    lev1maps = os.listdir(lev1mapfolder)
    navfile = read_sol_file.readSol(navfile)
    adjust=[]
-   for flightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x]:
+   for flightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x and "aux" not in x]:
       #we need to establish the altitude of our primary flightline
-      baseigmfile = [x for x in igmfiles if flightline[:5] in x and 'osng' in x and 'igm' in x and 'hdr' not in x][0]
+      baseigmfile = [x for x in igmfiles if flightline[:5] in x and 'osng' in x and 'igm' in x and 'hdr' not in x and "aux" not in x][0]
       baseflightline = flightline
       baseflightline = (flightlinefolder + '/' + flightline)
-      print flightline
-      baseflightlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if flightline[:5] in hdrfile and 'hdr' in hdrfile and "mask" not in hdrfile][0])
+      baseflightlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if flightline[:5] in hdrfile and 'hdr' in hdrfile and "mask" not in hdrfile ][0])
       baseflightlinealtitude = altFind(baseflightlineheaderfile, navfile)
-      baselev1map = lev1mapfolder + '/' + [x for x in lev1maps if flightline[:5] in x and 'bil' in x and 'hdr' not in x][0]
+      baselev1map = lev1mapfolder + '/' + [x for x in lev1maps if flightline[:5] in x and 'bil' in x and 'hdr' not in x and "aux" not in x][0]
       igmarray = igmparser.bilReader(igmfolder + '/' + baseigmfile)
 
       scanlineadjustments = []
       totalpoints = 0
-      for queryflightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x]:
+      for queryflightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x and "aux" not in x]:
          #need to test if they have the same filename otherwise it would be bad
          if queryflightline not in baseflightline:
             print "%s being compared to %s" % (queryflightline, baseflightline)
@@ -129,9 +128,9 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
             if (queryflightlinealtitude >= baseflightlinealtitude - 100) and (queryflightlinealtitude <= baseflightlinealtitude + 100):
                print "altitudes matched at %s %s" % (queryflightlinealtitude, baseflightlinealtitude)
                #then test for overlap
-               queryigmfile = [x for x in igmfiles if queryflightline[:5] in x and 'osng' in x and 'igm' in x and 'hdr' not in x][0]
+               queryigmfile = [x for x in igmfiles if queryflightline[:5] in x and 'osng' in x and 'igm' in x and 'hdr' not in x and "aux" not in x][0]
                queryigmarray = igmparser.bilReader(igmfolder + '/' + queryigmfile)
-               querylev1map = lev1mapfolder + '/' + [x for x in lev1maps if queryflightline[:5] in x and 'bil' in x and 'hdr' not in x][0]
+               querylev1map = lev1mapfolder + '/' + [x for x in lev1maps if queryflightline[:5] in x and 'bil' in x and 'hdr' not in x and "aux" not in x][0]
                queryflightline = flightlinefolder + '/' + queryflightline
                gdalqueryflightline = gdal.Open(queryflightline)
                gdalbaseflightline = gdal.Open(baseflightline)
@@ -168,6 +167,8 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
                                                                                         band=band)
                      except ValueError:
                          no_matches=True
+                     except TypeError:
+                         no_matches=True
                      if not no_matches:
                          pointcombos = imagematcher.matches_to_hyperspectral_geopoints(baselev1map,
                                                                                       querylev1map,
@@ -178,59 +179,62 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
                                                                                       querykeys,
                                                                                       trext,
                                                                                       qext)
-                         if len(pointcombos[0]) > 0:
-                            pitch = []
-                            roll = []
-                            heading = []
-                            for pointgroup in pointcombos:
-                               if pointgroup[5] is RIGHT:
-                                  for comparisonpoint in pointcombos:
-                                     if comparisonpoint[5] is LEFT:
-                                        intersectpoint = distancecalculator.intersect(pointgroup[0],
-                                                                                      comparisonpoint[0],
-                                                                                      pointgroup[1],
-                                                                                      comparisonpoint[1])
-                                        print "intersect point pre centre pix"
-                                        print intersectpoint
-                                        print "centre pix"
-                                        print pointgroup[2]
-                                        intersectpoint = [intersectpoint[0] + pointgroup[2][0],
-                                                         intersectpoint[1] + pointgroup[2][1],
-                                                         pointgroup[2][2]]
-                                        if intersectpoint[0] < 800000 or intersectpoint[1] < 800000:
-                                            tempheading = distancecalculator.headingAngle(intersectpoint,
-                                                                                          pointgroup[0],
-                                                                                          pointgroup[1])
-                                            heading.append(tempheading)
-                                        else:
-                                            heading.append(0)
-                               if pointgroup[5] is LEFT:
-                                  for comparisonpoint in pointcombos:
-                                     if comparisonpoint[5] is RIGHT:
-                                        intersectpoint = distancecalculator.intersect(pointgroup[3],
-                                                                                      comparisonpoint[3],
-                                                                                      pointgroup[4],
-                                                                                      comparisonpoint[4])
-                                        print "intersect point pre centre pix"
-                                        print intersectpoint
-                                        print "centre pix"
-                                        print pointgroup[2]
-                                        intersectpoint = [intersectpoint[0] + pointgroup[2][0],
-                                                        intersectpoint[1] + pointgroup[2][1],
-                                                        pointgroup[2][2]]
-                                        if intersectpoint[0] < 800000 or intersectpoint[1] < 800000:
-                                            tempheading = distancecalculator.headingAngle(intersectpoint,
-                                                                                          pointgroup[0],
-                                                                                          pointgroup[1])
-                                            heading.append(tempheading)
-                                        else:
-                                            heading.append(0)
+                         try:
+                             if len(pointcombos[0]) > 0:
+                                pitch = []
+                                roll = []
+                                heading = []
+                                for pointgroup in pointcombos:
+                                   if pointgroup[5] is RIGHT:
+                                      for comparisonpoint in pointcombos:
+                                         if comparisonpoint[5] is LEFT:
+                                            intersectpoint = distancecalculator.intersect(pointgroup[0],
+                                                                                          comparisonpoint[0],
+                                                                                          pointgroup[1],
+                                                                                          comparisonpoint[1])
+                                            intersectpoint = [intersectpoint[0] + pointgroup[2][0],
+                                                             intersectpoint[1] + pointgroup[2][1],
+                                                             pointgroup[2][2]]
+                                            if (intersectpoint[0] < 800000) and (intersectpoint[1] < 800000):
+                                                if (intersectpoint > -100000) and (intersectpoint > -100000):
+                                                    try:
+                                                        tempheading = distancecalculator.headingAngle(intersectpoint,
+                                                                                                      pointgroup[0],
+                                                                                                      pointgroup[1])
+                                                        heading.append(tempheading)
+                                                    except ValueError, e:
+                                                        print e
+                                            else:
+                                                heading.append(0)
+                                   if pointgroup[5] is LEFT:
+                                      for comparisonpoint in pointcombos:
+                                         if comparisonpoint[5] is RIGHT:
+                                            intersectpoint = distancecalculator.intersect(pointgroup[0],
+                                                                                          comparisonpoint[0],
+                                                                                          pointgroup[1],
+                                                                                          comparisonpoint[1])
+                                            intersectpoint = [intersectpoint[0] + pointgroup[2][0],
+                                                             intersectpoint[1] + pointgroup[2][1],
+                                                             pointgroup[2][2]]
+                                            if (intersectpoint[0] < 800000) and (intersectpoint[1] < 800000):
+                                                if (intersectpoint > -100000) and (intersectpoint > -100000):
+                                                    try:
+                                                        tempheading = distancecalculator.headingAngle(intersectpoint,
+                                                                                                      pointgroup[0],
+                                                                                                      pointgroup[1])
+                                                        heading.append(tempheading)
+                                                    except ValueError, e:
+                                                        print e
+                                            else:
+                                                heading.append(0)
 
-                            for pointgroup in pointcombos:
-                               temppitch, temproll = distancecalculator.pitchRollAdjust(pointgroup[2],pointgroup[1],pointgroup[0],2000)
-                               pitch.append(temppitch)
-                               roll.append(temproll)
-                            adjust.append([pitch, roll, heading])
+                                for pointgroup in pointcombos:
+                                   temppitch, temproll = distancecalculator.pitchRollAdjust(pointgroup[2],pointgroup[1],pointgroup[0],2000)
+                                   pitch.append(temppitch)
+                                   roll.append(temproll)
+                                adjust.append([pitch, roll, heading])
+                         except IndexError:
+                             continue
                      else:
                          print "no matches between %s and %s" % (queryflightline, baseflightline)
                else:
@@ -256,14 +260,7 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
          r = np.float64(r / length)
          h = np.float64(h / length)
 
-         if gcpadjustments != None:
-            pgcp = (pgcp + gcpadjustments[0]) / 2
-            rgcp = (rgcp + gcpadjustments[1]) / 2
-            hgcp = (hgcp + gcpadjustments[2]) / 2
-
-            adjust.append([p, r, h, pgcp, rgcp, hgcp])
-         else:
-            adjust.append([p, r, h])
+         adjust.append([p, r, h])
       else:
          continue
 
@@ -271,28 +268,27 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
    r = 0
    h = 0
    print "Total queryflightline adjustments:"
-   print len(adjust)
-   for a in adjust:
-      # print a[0]
-      p = p + a[0]
-      # print a[1]
-      r = r + a[1]
-      # print a[2]
-      h = h + a[2]
-   length = len(adjust)
-   if length > 1:
-      p = p / length
-      r = r / length
-      h = h / length
-   print "pitch"
-   print p / 2
-   print "roll"
-   print r / 2
-   print "heading"
-   print h / 2
-   print "Calculated on %s points from %s flightlines" % (totalpoints, len(os.listdir(flightlinefolder)))
-   print "Took %s seconds" % (timeit.default_timer() - start_time)
-   return p, r, h
+   adjust = np.array(adjust)
+   print adjust.shape()
+   print adjust.mean(axis=0)
+   print adjust.mean(axis=1)
+   # for flightline in adjust:
+   #    p = p + reduce(lambda x, y: x + y, flightline[0]) / len(flightline[0])
+   #    r = r +
+   # length = len(adjust)
+   # if length > 1:
+   #    p = p / length
+   #    r = r / length
+   #    h = h / length
+   # print "pitch"
+   # print p / 2
+   # print "roll"
+   # print r / 2
+   # print "heading"
+   # print h / 2
+   # print "Calculated on %s points from %s flightlines" % (totalpoints, len(os.listdir(flightlinefolder)))
+   # print "Took %s seconds" % (timeit.default_timer() - start_time)
+   # return p, r, h
 
 if __name__=='__main__':
    #Get the input arguments
