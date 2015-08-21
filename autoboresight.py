@@ -119,7 +119,7 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
       for queryflightline in [x for x in os.listdir(flightlinefolder) if 'hdr' not in x and "aux" not in x]:
          #need to test if they have the same filename otherwise it would be bad
          if queryflightline not in baseflightline:
-            print "%s being compared to %s" % (queryflightline, baseflightline)
+            print "%s being compared to %s" % (os.path.basename(queryflightline), os.path.basename(baseflightline))
             #first test for same altitude
             queryflightlineheaderfile = open(hdrfolder + '/' + [hdrfile for hdrfile in hdrfiles if queryflightline[:5] in hdrfile and 'hdr' in hdrfile and "mask" not in hdrfile][0])
             queryflightlinealtitude = altFind(queryflightlineheaderfile, navfile)
@@ -156,7 +156,7 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
 
                #if there isn't an overlap then we should ignore these flightlines
                if overlap != None:
-                  print "overlap confirmed between %s and %s region is:" % (queryflightline, baseflightline)
+                  print "overlap confirmed between %s and %s region is:" % (os.path.basename(queryflightline), os.path.basename(baseflightline))
                   for band in BANDLIST:
                      no_matches=False
                      try:
@@ -179,6 +179,7 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
                                                                                       querykeys,
                                                                                       trext,
                                                                                       qext)
+
                          try:
                              if len(pointcombos[0]) > 0:
                                 pitch = []
@@ -236,11 +237,14 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
                          except IndexError:
                              continue
                      else:
-                         print "no matches between %s and %s" % (queryflightline, baseflightline)
+                         print "no matches between %s and %s" % (os.path.basename(queryflightline), os.path.basename(baseflightline))
                else:
-                  print "no overlap between %s and %s" % (queryflightline, baseflightline)
+                  print "no overlap between %s and %s" % (os.path.basename(queryflightline), os.path.basename(baseflightline))
             else:
-               print "%s and %s flown at different altitudes (%s, %s), skipping to avoid result skew" % (baseflightline, queryflightline, baseflightlinealtitude, queryflightlinealtitude)
+               print "%s and %s flown at different altitudes (%s, %s), skipping to avoid result skew" % (os.path.basename(baseflightline),
+                                                                                                         os.path.basename(queryflightline),
+                                                                                                         baseflightlinealtitude,
+                                                                                                         queryflightlinealtitude)
          else:
             continue
 
@@ -270,27 +274,52 @@ def autoBoresight(flightlinefolder, gcpfolder, gcpcsv, igmfolder, navfile, outpu
    print "Total queryflightline adjustments:"
    adjust = np.array(adjust)
 
-   baseheading = np.array(adjust[:, 3])
-   basepitch = np.array(adjust[:, 1])
-   baseroll = np.array(adjust[:, 2])
-   print "heading"
-   print np.mean(np.ravel(baseheading))
-   print "roll"
-   print np.mean(np.ravel(baseroll))
-   print "pitch"
-   print np.mean(np.ravel(basepitch))
+   print adjust.shape
+   type(adjust)
+
+   baseheading = np.copy(np.array(adjust[:, 3]))
+   basepitch = np.copy(np.array(adjust[:, 1]))
+   baseroll = np.copy(np.array(adjust[:, 2]))
+
+   print type(baseheading)
+   print type(baseroll)
+   print type(basepitch)
+
+   headingavg = 0
+   pitchavg = 0
+   rollavg=0
+   headinglength = 0
+   pitchlength = 0
+   rolllength = 0
+
+   np.save("/users/rsg/stgo/network_scratch/heading.txt", baseheading)
+   np.save("/users/rsg/stgo/network_scratch/pitch.txt", basepitch)
+   np.save("/users/rsg/stgo/network_scratch/roll.txt", baseroll)
 
    print "per flightline avgs"
-   print "pitch"
+   heading = np.array([[]])
+   pitch = np.array([])
+   roll = []
    for adjustment in adjust:
-       print "heading"
-       print np.mean(adjustment[:, 3])
+       for item in adjustment:
+           if len(item) > 3:
+               heading.append(np.array(item[3]))
+               roll.append(item[2])
+               pitch.append(item[1])
 
-       print "roll"
-       print np.mean(adjustment[:, 2])
+   heading = np.array(heading)
+   roll = np.array(roll)
+   pitch = np.array(pitch)
 
-       print "pitch"
-       print np.mean(adjustment[:, 1])
+   print "heading"
+   print heading.mean()
+
+   print "pitch"
+   print pitch.mean()
+
+   print "roll"
+   print roll.mean()
+
    # for flightline in adjust:
    #    p = p + reduce(lambda x, y: x + y, flightline[0]) / len(flightline[0])
    #    r = r +
